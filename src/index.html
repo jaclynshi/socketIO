@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<style>
+    .chat{
+        width: 500px;
+        height: 400px;
+        border: 1px solid blue;
+        display: none;
+    }
+    .chatContent{
+        width: 90%;
+        height: 80%;
+        border: 1px solid yellowgreen;
+        margin: 0 auto;
+    }
+    .sendMsg{
+         text-align: center;
+         margin-top: 4px;
+     }
+    .inp-box{
+        outline: none;
+        border: 1px solid;
+        height: 30px;
+    }
+    .msg-box.left{
+        float: left;
+    }
+    .msg-box .right{
+        float: right;
+    }
+</style>
+<body>
+用户名：<input type="text" id="userName">
+<p class="userName"></p>
+
+在线用户
+<div class="userList"></div>
+<div class="chat">
+    <p class="sendFriend"></p>
+    <div class="chatContent"></div>
+    <div class="sendMsg">
+        <div class="msg inp-box" contenteditable="true" placeholder="在此输入消息..."></div>
+    </div>
+</div>
+</body>
+<script src="script/tools.js"></script>
+<script>
+    function Chat(){
+        this.userName;
+        this.id;
+        this.userList = [];
+        this.sendFriend = '';
+        this.messageJson = {};
+    }
+
+    Chat.prototype = {
+        init() {
+            $('#userName').onkeydown = (e) => {
+                // 回车事件
+                if (e.code === 'Enter') {
+                    e.preventDefault ? e.preventDefault() : e.returnValue = false
+                    this.login()
+                }
+            }
+
+            $('.msg').onkeydown = (e) => {
+                // 回车事件
+                if (e.code === 'Enter') {
+                    e.preventDefault ? e.preventDefault() : e.returnValue = false
+                    this.send();
+                }
+            }
+        },
+        login() {
+            var userName = $('#userName').value
+            if (userName !== '') {
+                $('.userName').innerText = userName;
+
+                this.initSocket(userName)
+            }
+        },
+        initSocket(userName) {
+            window.socket = io();
+            window.socket.on('connect', () => {
+                window.socket.on('success', data => {
+                    let userInfo = {
+                        userName: userName,
+                        userID: window.socket.id
+                    }
+                    this.userName = userName
+                    window.socket.emit('login', userInfo);
+                })
+
+            })
+            window.socket.on('userList', (userList) => {
+                this.userList = userList
+                this.drawUserList();
+            })
+
+            window.socket.on('quit', (id) => {
+                this.userList = this.userList.filter(item => item.userID != id)
+                this.drawUserList();
+            })
+
+            window.socket.on('receiveMsg', (data) => {
+                $('.chat').style.display = 'block';
+                this.setMessageJson(data);
+                this.sendFriend = data.sendId;
+                this.drawMessageList();
+            })
+        },
+        drawUserList() {
+            var str = ''
+            this.userList.forEach(item => {
+                str += `<li onclick="sendTo('${item.userID}', '${item.userName}')">${item.userName}</li>`;
+            })
+            $('.userList').innerHTML = str;
+        },
+        drawMessageList() {
+            let msg = '';
+            if (!this.messageJson[this.sendFriend]) return;
+            this.messageJson[this.sendFriend].forEach(item => {
+                if (item.sendId === window.socket.id) {
+                    msg += `<div class="msg-box right">
+                            <p>${item.userName}:</p>
+                            <div class="message">${item.msg}</div>
+                        </div>`
+                } else {
+                    msg += `<div class="msg-box left">
+                            <p>${item.userName}:</p>
+                            <div class="message">${item.msg}</div>
+                        </div>`
+                }
+            })
+            $('.chatContent').innerHTML = msg;
+            $('.msg').innerHTML = '';
+        },
+        send() {
+            let info = {
+                sendId: window.socket.id,
+                id: this.sendFriend,
+                userName: this.userName,
+                msg: $('.msg').innerHTML
+            }
+            window.socket.emit('sendMsg', info)
+            if (this.messageJson[this.sendFriend]) {
+                this.messageJson[this.sendFriend].push(info)
+            } else {
+                this.messageJson[this.sendFriend] = [info];
+            }
+            this.drawMessageList();
+        },
+        setMessageJson(data) {
+            if (this.messageJson[data.sendId]) {
+                this.messageJson[data.sendId].push(data)
+            } else {
+                this.messageJson[data.sendId] = [data];
+            }
+        }
+    }
+
+    function sendTo(id, name) {
+        $('.chat').style.display = "block";
+        $('.sendFriend').innerText = name;
+        chat.sendFriend = id;
+        if (id !== this.sendFriend){
+            $('.chatContent').innerHTML = '';
+            this.sendFriend = id;
+            chat.drawMessageList();
+        }
+    }
+
+    let chat = new Chat();
+    chat.init();
+</script>
+</html>
